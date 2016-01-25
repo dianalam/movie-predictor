@@ -7,9 +7,14 @@ import re
 import dateutil.parser
 from word2number import w2n
 import string
+from pprint import pprint
 
 # storing
 import pickle
+import os
+
+# text alerts
+from twilio.rest import TwilioRestClient
 
 def get_movie_page(url):
 	'''
@@ -91,13 +96,13 @@ def budget_to_int(budgetstring):
 	
 def people_to_list(peopleobj):
 	if peopleobj is None:
-		return None
+		return ''
 	else: 
 		try:
 			people_list = [str(person.strip('*')) for person in peopleobj.stripped_strings if '(' not in person]  
 			return people_list
 		except:
-			return None 
+			return '' 
 
 def noms_from_oscars(oscarsstring):
 	'''Converts descriptive oscars text to number of nominations as int.'''
@@ -157,8 +162,11 @@ def get_movie_data(soup):
 	raw_budget = get_movie_value(soup, 'Production')
 	budget = budget_to_int(raw_budget)
 
-	raw_domestic_total_gross = get_movie_value(soup,'Domestic Total')
+	raw_domestic_total_gross = get_movie_value(soup,'Domestic:')
 	domestic_total_gross = money_to_int(raw_domestic_total_gross)
+
+	raw_domestic_total_adj_gross = get_movie_value(soup,'Domestic Total Adj')
+	domestic_total_adj_gross = money_to_int(raw_domestic_total_adj_gross)
 	
 	raw_intl_total_gross = get_movie_value(soup, 'Worldwide')
 	intl_total_gross = money_to_int(raw_intl_total_gross)
@@ -189,8 +197,8 @@ def get_movie_data(soup):
 	producers = people_to_list(raw_producers)
 	
 	headers = ['1-title', 'rating', 'genre', 'distributor', 'theaters', 'budget', 'dom_total_gross', 
-			   'intl_total_gross', 'oscar_noms', 'oscar_wins', '2-release_date', '3-closing_date', 
-			   'runtime_(mins)', 'director', 'writers', 'actors', 'producers']
+			   'domestic_total_adj_gross', 'intl_total_gross', 'oscar_noms', 'oscar_wins', '2-release_date', '3-closing_date', 
+			   'runtime_mins', 'director', 'writers', 'actors', 'producers']
 
 	movie_dict = dict(zip(headers, [title,
 									rating, 
@@ -199,6 +207,7 @@ def get_movie_data(soup):
 									theaters,
 									budget,
 									domestic_total_gross,
+									domestic_total_adj_gross,
 									intl_total_gross,
 									oscar_noms, 
 									oscar_wins,
@@ -256,45 +265,65 @@ def get_num_movies():
 def get_all_movie_data(url_list):
 	'''Takes a list of individual movie page urls and returns a list of dictionaries of individual movie data.'''
 	url_prefix = 'http://www.boxofficemojo.com'
+	url_suffix = '&adjust_yr=2016'
 	all_movie_data = []
 	failed_urls = []
 	for movie in url_list:
-		url = url_prefix + movie
+		url = url_prefix + movie + url_suffix
 		try:
 			soup = get_movie_page(url)
 			data_dict = get_movie_data(soup)
 			data_dict['url'] = movie.split("=")[1] # add movie url for reference
 			all_movie_data.append(data_dict)
 		except:
-			print 'error processing url: ' + url
+			print 'error processing url: ' + movie
 			failed_urls.append(url)
-		print 'processed: ' + url
+		print 'processed: ' + movie
 	return all_movie_data, failed_urls
 
-### RUN STUFF
+def text_me(number):
+	"""Send a text message when done scraping if env variables TWILIO_SID and TWILIO_TOKEN
+	are set.
+	Args:
+	number (string) -- your phone number, formatted as +1<number>
+	"""
+	try:
+		account_sid = os.environ["TWILIO_SID"]
+		auth_token = os.environ["TWILIO_TOKEN"]
+		client = TwilioRestClient(account_sid, auth_token)
+		message = client.messages.create(to=number, from_="+13476258954",
+	                                     body="done scraping movies!")
+		print 'Sending text message!'
+	except:
+		print 'No twilio credentials configured.'
 
-# for github script, should include running of the function to get movie list and then 
-# run subsequent script on it or on pickled data 
+def main():
+	### get list of all movies, pickle, and return; not needed if .pkl file exists
+	# letter_list = list(string.ascii_uppercase)
+	# all_movies_list = get_movies_from_letters(letter_list)
+	# num_movies = get_num_movies()
+	# all_movies_list.extend(num_movies)
+	# with open('pickled_data/all-movies-list2.pkl', 'w') as picklefile:
+	#     pickle.dump(all_movies_list, picklefile)
+	###
 
-# get list of all movies, pickle, and return
-all_movies_list = get_movies_from_letters(letter_list)
-num_movies = get_num_movies()
-all_movies_list.extend(num_movies)
+	### for scraping     
+	with open('pickled_data/all-movies-list2.pkl', 'r') as picklefile:
+	    loaded_movie_list = pickle.load(picklefile)
 
-with open('pickled_data/all-movies-list2.pkl', 'w') as picklefile:
-    pickle.dump(all_movies_list, picklefile)
-    
-with open('pickled_data/all-movies-list2.pkl', 'r') as picklefile:
-    loaded_movie_list = pickle.load(picklefile)
+	# get movie data from list of movie urls and pickle
+	all_movies_dict, failed_urls = get_all_movie_data(loaded_movie_list)
 
+	with open('pickled_data/all-movies-data.pkl', 'w') as picklefile:
+		pickle.dump(all_movies_dict, picklefile)
 
-# get movie data from list of movie urls and pickle
-letter_list = list(string.ascii_uppercase)
-all_movies_dict, failed_urls = get_all_movie_data(loaded_movie_list)
+	with open('pickled_data/failed-urls.pkl', 'w') as picklefile:
+		pickle.dump(failed_urls, picklefile)
 
-with open('pickled_data/all-movies-data.pkl', 'w') as picklefile:
-	pickle.dump(all_movies_dict, picklefile)
+	# get text notification when done
+	text_me('+16462705199')
+	print 'Done processing!'
+	print 'Data saved as all-movies-data.pkl'
 
-with open('pickled_data/failed-urls.pkl', 'w') as picklefile:
-	pickle.dump(failed_urls, picklefile)
-
+if __name__ == '__main__':
+    main()

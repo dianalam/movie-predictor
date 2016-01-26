@@ -265,7 +265,7 @@ def get_num_movies():
 def get_all_movie_data(url_list):
 	'''Takes a list of individual movie page urls and returns a list of dictionaries of individual movie data.'''
 	url_prefix = 'http://www.boxofficemojo.com'
-	url_suffix = '&adjust_yr=2016'
+	url_suffix = '&adjust_yr=2015'
 	all_movie_data = []
 	failed_urls = []
 	for movie in url_list:
@@ -314,10 +314,10 @@ def main():
 	# get movie data from list of movie urls and pickle
 	all_movies_dict, failed_urls = get_all_movie_data(loaded_movie_list)
 
-	with open('pickled_data/all-movies-data.pkl', 'w') as picklefile:
+	with open('pickled_data/all-movies-data3.pkl', 'w') as picklefile:
 		pickle.dump(all_movies_dict, picklefile)
 
-	with open('pickled_data/failed-urls.pkl', 'w') as picklefile:
+	with open('pickled_data/failed-urls3.pkl', 'w') as picklefile:
 		pickle.dump(failed_urls, picklefile)
 
 	# get text notification when done
